@@ -2,9 +2,11 @@ import json
 import re
 import random
 import requests
+import csv
 from pyexcel_xlsx import get_data, save_data
 from time import sleep
 from collections import OrderedDict
+from xlsxwriter.workbook import Workbook
 
 
 FEED_URL = 'https://www.dropbox.com/s/1avucuy5zs2a7wc/Pages & Groups Analysis Quo Use V.2.xlsx?' \
@@ -14,46 +16,42 @@ FEED_URL = 'https://www.dropbox.com/s/1avucuy5zs2a7wc/Pages & Groups Analysis Qu
 LIKES_API = 'https://graph.facebook.com/%s/feed?' \
             'access_token=1318151578265722|8af8c5e756731c09ebcfaf8829103fc0&' \
             'since=2017-01-01&' \
-            'fields=likes{link},link&limit=100'
+            'fields=likes{link},link,created_time&limit=100'
 
 F_ID_RE = re.compile('"page_id":(\d+),')
 
 
 class LikesScrapes():
     def main(self):
-        result_data = {'Sheet1': []}
         self._save_feed_data()
-        data = get_data('input_data.xlsx')
-        nnn = 1
-        for i in self._get_input_links(data['Sheet1']):
-            print nnn
-            fid = self._get_f_id(i)
-            if not fid:
-                print 444444, i
-                continue
-            print LIKES_API % fid
-            api_data = requests.get(LIKES_API % self._get_f_id(i)).json()
-            nnn += 1
+        input_data = get_data('input_data.xlsx')
+        with open('output_file.csv', 'w') as otput_scv:
+            otput_scv.write('{},{},{},{}'.format('Groups or pages', 'Post links', 'Post date', 'Profile link') + '\n')
+            for i in self._get_input_links(input_data['Sheet1'])[:5]:
+                fid = self._get_f_id(i)
+                if not fid:
+                    otput_scv.write('{},null,null,null'.format(i) + '\n')
+                    continue
+                api_data = requests.get(LIKES_API % self._get_f_id(i)).json()
+                if api_data.get('error'):
+                    otput_scv.write('{},null,null,null'.format(i) + '\n')
+                    continue
+                sleep(random.choice(range(1, 2)))
+                for r in self._get_posts_data(api_data, i):
+                    otput_scv.write(r + '\n')
 
-            if api_data.get('error'):
-                print "error 1"
-                continue
+            workbook = Workbook('csvfile.xlsx')
+            worksheet = workbook.add_worksheet()
 
-            sleep(random.choice(range(1, 2)))
+        with open('output_file.csv', 'r') as otput_scv:
+            reader = csv.reader(otput_scv)
+            for r, row in enumerate(reader):
+                print r
+                for c, col in enumerate(row):
+                    worksheet.write(r, c, col)
+            workbook.close()
 
-            col_b = self._get_posts_data(api_data)
-            col_a = [''] * (len(col_b)-1)
-            col_a.insert(0, i)
-            tuples = zip(col_a, col_b)
-            lists = [list(t) for t in tuples]
-            result_data['Sheet1'].extend(lists)
-
-        output_data = OrderedDict()
-        output_data.update(result_data)
-        save_data("output_file.xlsx", output_data)
-        open('fffff.txt', 'w').write(json.dumps(result_data))
-
-    def _get_posts_data(self, data, all_data=None):
+    def _get_posts_data(self, data, input_url, all_data=None):
         all_data = [] if all_data is None else all_data
 
         if data.get('data'):
@@ -64,27 +62,30 @@ class LikesScrapes():
         if not next_page:
             links = []
             for i in all_data:
-                links.extend(self._collect_likers(i))
-            return list(set(links))
+                post_url = i.get('link', i['id'])
+                post_time = i['created_time']
+                post_likes = self._collect_likers(i, input_url, post_url, post_time)
+                links.extend(post_likes)
+            return links
         else:
             sleep(random.choice(range(1, 2)))
             next_data = requests.get(next_page.replace('limit=25', 'limit=100')).json()
-            return self._get_posts_data(next_data, all_data)
+            return self._get_posts_data(next_data, input_url, all_data)
 
-    def _collect_likers(self, data, all_links=None):
+    def _collect_likers(self, data, input_url, post_url, post_time, all_links=None):
 
         if all_links is None:
             all_links = []
         likers = data['likes']['data'] if data.get('likes') else []
         for i in likers:
-            all_links.append(i['link'])
+            all_links.append('{},{},{},{}'.format(input_url, post_url, post_time, i['link']))
         next_page = data['paging'].get('next') if data.get('paging') else None
         if not next_page:
-            return list(set(all_links))
+            return all_links
         else:
             sleep(random.choice(range(1, 2)))
             next_data = requests.get(next_page.replace('limit=25', 'limit=100')).json()
-            return self._collect_likers(next_data, all_links)
+            return self._collect_likers(next_data, input_url, post_url, post_time, all_links)
 
     def _save_feed_data(self):
         with open('input_data.xlsx', 'w') as f:
