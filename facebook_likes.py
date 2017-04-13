@@ -1,12 +1,15 @@
-import json
 import re
 import random
 import requests
 import csv
-from pyexcel_xlsx import get_data, save_data
+from pyexcel_xlsx import get_data
 from time import sleep
-from collections import OrderedDict
 from xlsxwriter.workbook import Workbook
+
+import sys
+
+reload(sys)
+sys.setdefaultencoding('utf8')
 
 
 FEED_URL = 'https://www.dropbox.com/s/1avucuy5zs2a7wc/Pages & Groups Analysis Quo Use V.2.xlsx?' \
@@ -27,28 +30,26 @@ class LikesScrapes():
         input_data = get_data('input_data.xlsx')
         with open('output_file.csv', 'w') as otput_scv:
             otput_scv.write('{},{},{},{}'.format('Groups or pages', 'Post links', 'Post date', 'Profile link') + '\n')
-            for i in self._get_input_links(input_data['Sheet1'])[:5]:
+            for i in self._get_input_links(input_data['Sheet1']):
                 fid = self._get_f_id(i)
                 if not fid:
-                    otput_scv.write('{},null,null,null'.format(i) + '\n')
+                    otput_scv.write('{},null,null,null'.format(i).encode('utf-8') + '\n')
                     continue
                 api_data = requests.get(LIKES_API % self._get_f_id(i)).json()
                 if api_data.get('error'):
-                    otput_scv.write('{},null,null,null'.format(i) + '\n')
+                    otput_scv.write('{},null,null,null'.format(i).encode('utf-8') + '\n')
                     continue
                 sleep(random.choice(range(1, 2)))
                 for r in self._get_posts_data(api_data, i):
                     otput_scv.write(r + '\n')
 
-            workbook = Workbook('csvfile.xlsx')
-            worksheet = workbook.add_worksheet()
-
         with open('output_file.csv', 'r') as otput_scv:
+            workbook = Workbook('csvfile.xlsx', {'strings_to_urls': False})
+            worksheet = workbook.add_worksheet()
             reader = csv.reader(otput_scv)
             for r, row in enumerate(reader):
-                print r
                 for c, col in enumerate(row):
-                    worksheet.write(r, c, col)
+                    worksheet.write(r, c, col.encode('utf-8'))
             workbook.close()
 
     def _get_posts_data(self, data, input_url, all_data=None):
@@ -78,7 +79,9 @@ class LikesScrapes():
             all_links = []
         likers = data['likes']['data'] if data.get('likes') else []
         for i in likers:
-            all_links.append('{},{},{},{}'.format(input_url, post_url, post_time, i['link']))
+            if 'scoped_user_id' not in i['link']:
+                continue
+            all_links.append('{},{},{},{}'.format(input_url, post_url.encode('utf-8'), post_time.split('T')[0], i['link']))
         next_page = data['paging'].get('next') if data.get('paging') else None
         if not next_page:
             return all_links
