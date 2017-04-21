@@ -12,6 +12,8 @@ reload(sys)
 sys.setdefaultencoding('utf8')
 
 
+CREDENTIALS_LIST = ['', '']
+
 FEED_URL = 'https://www.dropbox.com/s/1avucuy5zs2a7wc/Pages & Groups Analysis Quo Use V.2.xlsx?' \
        '_download_id=038177759136897694518006274979411474180122286806755418256791666272' \
        '&_notify_domain=www.dropbox.com&dl=1'
@@ -37,10 +39,12 @@ class LikesScrapes():
     def main(self):
         # input_data = get_data(self.input_file)
         # self._write_to_csv(input_data)
+
+        # print input_data
         # self._write_v_2_to_csv(input_data)
-        # self._write_to_output_file()
+        self._write_to_output_file()
         #
-        self._get_prew_output_links()
+        # self._get_prew_output_links()
 
     def _get_posts_data(self, data, input_url, all_data=None, n=0):
         all_data = [] if all_data is None else all_data
@@ -131,25 +135,25 @@ class LikesScrapes():
     def _write_v_2_to_csv(self, input_data):
         with open(self.output_scv, 'w') as otput_scv:
             otput_scv.write('{},{},{},{},{},{}'.format('Country', 'PIC', 'China', 'Chinese language', 'Groups & Pages', 'Profile Links') + '\n')
-            for i in input_data['Sheet1'][1300:]:
+            for i in input_data['Sheet1'][1:]:
                 print 77777734777, i
                 fid = self._get_f_id(i[4])
                 if not fid:
                     print 111111111
-                    otput_scv.write('{},{},{},{},{},null'.format(i[0], i[1], i[2], i[3], i[4]).encode('utf-8') + '\n')
+                    otput_scv.write('{},{},{},{},{},null'.replace(',\n', ',').format(i[0], i[1], i[2], i[3], i[4]).encode('utf-8') + '\n')
                     continue
                 api_data = requests.get(LIKES_API % fid).json()
                 if api_data.get('error'):
-                    otput_scv.write('{},{},{},{},{},null'.format(i[0], i[1], i[2], i[3], i[4]).encode('utf-8') + '\n')
+                    otput_scv.write('{},{},{},{},{},null'.replace(',\n', ',').format(i[0], i[1], i[2], i[3], i[4]).encode('utf-8') + '\n')
                     print 22222222222
                     continue
                 sleep(random.choice(range(0, 1)))
                 for r in self._get_posts_data_v_2(api_data, i):
-                    otput_scv.write(r + '\n')
+                    otput_scv.write(r.replace(',\n', ',') + '\n')
 
     def _write_to_output_file(self):
-        with open('o_scv.csv', 'r') as otput_scv:
-            workbook = Workbook('csvfile.xlsx', {'strings_to_urls': False})
+        with open('duplicates.csv', 'r') as otput_scv:
+            workbook = Workbook('duplicates.xlsx', {'strings_to_urls': False})
             worksheet = workbook.add_worksheet()
             reader = csv.reader(otput_scv)
             for r, row in enumerate(reader):
@@ -184,29 +188,34 @@ class LikesScrapes():
 
     def _get_prew_output_links(self):
 
+        # with open('output_old.csv', 'w') as old_scv:
+        #     input_data = get_data('csvfile.xlsx')
+        #     for i in input_data['Sheet1'][1:]:
+        #         old_scv.write(i[-1] + '\n')
 
-        with open('output_data/output_old.csv', 'w') as old_scv:
-            input_data = get_data('input_data/new_format_file.xlsx')
-            for i in input_data['Sheet1'][1:]:
-                old_scv.write(i[-1] + '\n')
-
-
-        f = open('output_data/output_old.csv', 'r').readlines()
+        f = open('output_old.csv', 'r').readlines()
         f = tuple(set(f))
+        f = [g.strip('\n') for g in f]
 
         print len(f)
 
 
+        # with open('output_current.csv', 'w') as current_scv:
+        #     i_data = get_data('output_data_2_fixed (copy).xlsx')
+        #     print len(i_data['Sheet1'][1:])
+        #     for i in i_data['Sheet1'][1:]:
+        #         current_scv.write(','.join(i) + '\n')
 
-        with open('o_scv.csv', 'r') as final_scv:
+        with open('v', 'r') as final_scv:
 
             u_l = []
 
-            with open('o_scv2.csv', 'w') as o_scv:
+            with open('duplicates.csv', 'w') as o_scv:
 
                 for p in final_scv:
-                    if p.split(',')[-1].strip() in f:
-                        print 1,
+                    if p.split(',')[-1].strip() in f and 'null' not in p.split(',')[-1].strip():
+                        print 1
+                        o_scv.write(p)
                         continue
                     # if p in u_l:
                     #     print 2
@@ -214,8 +223,8 @@ class LikesScrapes():
                     # else:
                     #     u_l.append(p)
 
-                    o_scv.write(p)
+                    # o_scv.write(p)
 
 
-a = LikesScrapes('input_data/input_data2.xlsx', 'output_data/output3.csv', 'output_data/output2.xlsx', 2)
+a = LikesScrapes('fb_small.xlsx', 'output3.csv', 'output2.xlsx', 2)
 print a.main()
