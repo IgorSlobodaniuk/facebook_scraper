@@ -14,15 +14,12 @@ sys.setdefaultencoding('utf8')
 
 CREDENTIALS_LIST = ['', '']
 
-FEED_URL = 'https://www.dropbox.com/s/1avucuy5zs2a7wc/Pages & Groups Analysis Quo Use V.2.xlsx?' \
-       '_download_id=038177759136897694518006274979411474180122286806755418256791666272' \
-       '&_notify_domain=www.dropbox.com&dl=1'
 
-PAGE_ID_API = 'https://graph.facebook.com/%s?access_token=1318151578265722|8af8c5e756731c09ebcfaf8829103fc0'
+PID_API = 'https://graph.facebook.com/%s?access_token=1318151578265722|8af8c5e756731c09ebcfaf8829103fc0'
 
 LIKES_API = 'https://graph.facebook.com/%s/feed?' \
             'access_token=1318151578265722|8af8c5e756731c09ebcfaf8829103fc0&' \
-            'since=2017-01-01&' \
+            'since=2017-04-18&' \
             'fields=likes{link},link,created_time&limit=100'
 
 F_ID_RE = re.compile('"page_id":(\d+),')
@@ -30,26 +27,35 @@ F_ID_RE = re.compile('"page_id":(\d+),')
 
 class LikesScrapes():
 
-    def __init__(self, input_file, output_scv, output_file, r_format):
-        self.input_file = input_file
-        self.output_scv = output_scv
-        self.output_file = output_file
-        self.r_format = r_format
+    def __init__(self, input_file_name):
+        self.input_file = './input_files/{}'.format(input_file_name)
+        self.output_scv = './output_files/{}.csv'.format(input_file_name.split('.')[0])
+        self.output_file = './output_files/output_{}'.format(input_file_name)
 
     def main(self):
-        # input_data = get_data(self.input_file)
-        # self._write_to_csv(input_data)
-
-        # print input_data
-        # self._write_v_2_to_csv(input_data)
+        input_data = get_data(self.input_file)
+        self._write_to_csv(input_data)
         self._write_to_output_file()
-        #
-        # self._get_prew_output_links()
 
-    def _get_posts_data(self, data, input_url, all_data=None, n=0):
+    def _write_to_csv(self, input_data):
+        with open(self.output_scv, 'w') as otput_scv:
+            titles = input_data['Sheet1'][0]
+            otput_scv.write(','.join(titles) + '\n')
+            for i in self._get_input_links(input_data['Sheet1'][1:]):
+                fid = self._get_f_id(i)
+                if not fid:
+                    otput_scv.write('{},{}{}'.format(','.join(titles[:-1]), 'Problematic source', '\n'))
+                    continue
+                api_data = requests.get(LIKES_API % fid).json()
+                if api_data.get('error'):
+                    otput_scv.write('{},{}{}'.format(','.join(titles[:-1]), 'Problematic source', '\n'))
+                    continue
+                sleep(random.choice(range(0, 1)))
+                for r in self._get_posts_data(api_data, i):
+                    otput_scv.write(r + '\n')
+
+    def _get_posts_data(self, data, input_url, all_data=None):
         all_data = [] if all_data is None else all_data
-
-        n += 1
 
         if data.get('data'):
             for p in data['data']:
@@ -57,21 +63,21 @@ class LikesScrapes():
 
         next_page = data['paging'].get('next') if data.get('paging') else None
 
-
-        if not next_page or n > 20:
+        if not next_page:
             links = []
+            attrs = {}
             for i in all_data:
-                post_url = i.get('link', i['id'])
-                post_time = i['created_time']
-                post_likes = self._collect_likers(i, input_url, post_url, post_time)
+                attrs['post_url'] = i.get('link', i['id'])
+                attrs['post_time'] = i['created_time']
+                post_likes = self._collect_likers(i, input_url, **attrs)
                 links.extend(post_likes)
             return links
         else:
             sleep(random.choice(range(0, 1)))
             next_data = requests.get(next_page.replace('limit=25', 'limit=100')).json()
-            return self._get_posts_data(next_data, input_url, all_data, n)
+            return self._get_posts_data(next_data, input_url, all_data)
 
-    def _collect_likers(self, data, input_url, post_url=None, post_time=None, all_links=None):
+    def _collect_likers(self, data, input_url, all_links=None, **attrs):
 
         if all_links is None:
             all_links = []
@@ -79,81 +85,21 @@ class LikesScrapes():
         for i in likers:
             if 'scoped_user_id' not in i['link']:
                 continue
-            if self.r_format == 1:
-                all_links.append('{},{},{},{}'.format(input_url, post_url.encode('utf-8'), post_time.split('T')[0], i['link']))
-            else:
-                all_links.append('{},{},{},{},{},{}'.format(input_url[0], input_url[1], input_url[2], input_url[3], input_url[4], i['link']))
+
+            all_links.append('{},{},{},{}'.format(input_url, attrs['post_url'].encode('utf-8'), attrs['post_time'].split('T')[0], i['link']))
+
         next_page = data['paging'].get('next') if data.get('paging') else None
         if not next_page:
             return all_links
         else:
             sleep(random.choice(range(0, 1)))
             next_data = requests.get(next_page.replace('limit=25', 'limit=100')).json()
-            return self._collect_likers(next_data, input_url, post_url, post_time, all_links)
+            return self._collect_likers(next_data, input_url, all_links, **attrs)
 
-    def _write_to_csv(self, input_data):
-        with open(self.output_scv, 'w') as otput_scv:
-            otput_scv.write('{},{},{},{}'.format('Groups or pages', 'Post links', 'Post date', 'Profile link') + '\n')
-            for i in self._get_input_links(input_data['Sheet1']):
-                fid = self._get_f_id(i)
-                if not fid:
-                    otput_scv.write('{},null,null,null'.format(i).encode('utf-8') + '\n')
-                    continue
-                api_data = requests.get(LIKES_API % fid).json()
-                if api_data.get('error'):
-                    otput_scv.write('{},null,null,null'.format(i).encode('utf-8') + '\n')
-                    continue
-                sleep(random.choice(range(0, 1)))
-                for r in self._get_posts_data(api_data, i):
-                    otput_scv.write(r + '\n')
-
-    def _get_posts_data_v_2(self, data, input_url, all_data=None, n=0):
-        all_data = [] if all_data is None else all_data
-        n += 1
-
-        if data.get('data'):
-            for p in data['data']:
-                all_data.append(p)
-
-        next_page = data['paging'].get('next') if data.get('paging') else None
-
-        if n > 20:
-            print 44444
-
-        if not next_page or n > 20:
-            links = []
-            for i in all_data:
-                post_url = i.get('link')
-                post_likes = self._collect_likers(i, input_url, post_url)
-                links.extend(post_likes)
-            return links
-        else:
-            sleep(random.choice(range(0, 1)))
-            next_data = requests.get(next_page.replace('limit=25', 'limit=100')).json()
-            return self._get_posts_data_v_2(next_data, input_url, all_data, n)
-
-    def _write_v_2_to_csv(self, input_data):
-        with open(self.output_scv, 'w') as otput_scv:
-            otput_scv.write('{},{},{},{},{},{}'.format('Country', 'PIC', 'China', 'Chinese language', 'Groups & Pages', 'Profile Links') + '\n')
-            for i in input_data['Sheet1'][1:]:
-                print 77777734777, i
-                fid = self._get_f_id(i[4])
-                if not fid:
-                    print 111111111
-                    otput_scv.write('{},{},{},{},{},null'.replace(',\n', ',').format(i[0], i[1], i[2], i[3], i[4]).encode('utf-8') + '\n')
-                    continue
-                api_data = requests.get(LIKES_API % fid).json()
-                if api_data.get('error'):
-                    otput_scv.write('{},{},{},{},{},null'.replace(',\n', ',').format(i[0], i[1], i[2], i[3], i[4]).encode('utf-8') + '\n')
-                    print 22222222222
-                    continue
-                sleep(random.choice(range(0, 1)))
-                for r in self._get_posts_data_v_2(api_data, i):
-                    otput_scv.write(r.replace(',\n', ',') + '\n')
 
     def _write_to_output_file(self):
-        with open('duplicates.csv', 'r') as otput_scv:
-            workbook = Workbook('duplicates.xlsx', {'strings_to_urls': False})
+        with open('output8.csv', 'r') as otput_scv:
+            workbook = Workbook('output8.xlsx', {'strings_to_urls': False})
             worksheet = workbook.add_worksheet()
             reader = csv.reader(otput_scv)
             for r, row in enumerate(reader):
@@ -162,22 +108,19 @@ class LikesScrapes():
             workbook.close()
 
 
-############################################################
-        ##################################################################3
-
-    def _save_feed_data(self):
-        with open('input_data.xlsx', 'w') as f:
-            f.write(requests.get(FEED_URL).content)
+########################################################################################################################
+########################################################################################################################
 
     def _get_f_id(self, url):
 
         if '/groups/' in url:
             return url.split('/groups/')[-1].split('/')[0]
-        data = requests.get(PAGE_ID_API % url.strip().strip('?ref=br_rs')).json()
-        pid = data.get('id')
-
-        if pid:
+        try:
+            data = requests.get(PID_API % url.strip().strip('?ref=br_rs')).json()
+            pid = data.get('id')
             return pid
+        except:
+            return
 
     def _get_input_links(self, data):
         links = []
@@ -226,5 +169,5 @@ class LikesScrapes():
                     # o_scv.write(p)
 
 
-a = LikesScrapes('fb_small.xlsx', 'output3.csv', 'output2.xlsx', 2)
+a = LikesScrapes('Part ALL.xlsx')
 print a.main()
