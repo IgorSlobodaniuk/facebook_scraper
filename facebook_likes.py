@@ -36,6 +36,7 @@ class LikesScrapes():
         self.since = since
 
     def main(self):
+        print 'Started'
         input_data = get_data(self.input_file)
         self._write_to_csv(input_data)
         self._write_to_output_file(self.output_scv, self.output_file)
@@ -44,21 +45,25 @@ class LikesScrapes():
         with open(self.output_scv, 'w') as otput_scv:
             titles = input_data['Sheet1'][0]
             otput_scv.write(','.join(titles) + '\n')
-            for i in input_data['Sheet1'][1:]:
+            print 'found {} input URLs'.format(input_data['Sheet1'][1:])
+            for n, i in enumerate(input_data['Sheet1'][1:]):
+                print '{}  URL: {}'.format(n, i[self.input_url_number_in_file])
                 fid = self._get_f_id(i[self.input_url_number_in_file])
                 if not fid:
                     otput_scv.write('{},{}\n'.format(','.join(i), 'Problematic source'))
+                    print 'input URL {} is problematic'.format(i[self.input_url_number_in_file])
                     continue
-
                 token = random.choice(CREDENTIALS_LIST)
                 api_data = requests.get(LIKES_API.format(fid, self.since, token) % fid).json()
                 if api_data.get('error'):
                     otput_scv.write('{},{}\n'.format(','.join(i), 'Problematic source'))
+                    print 'input URL {} is problematic'.format(i[self.input_url_number_in_file])
                     continue
                 sleep(random.choice(range(0, 1)))
 
                 for r in self._get_posts_data(api_data, i):
                     otput_scv.write(r + '\n')
+            print 'Finished'
 
     def _get_posts_data(self, data, input_url_data, all_data=None):
         all_data = [] if all_data is None else all_data
@@ -133,4 +138,4 @@ class LikesScrapes():
 
 
 a = LikesScrapes('Part ALL.xlsx', 4, '2017-04-18')
-print a.main()
+a.main()
